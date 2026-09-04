@@ -96,9 +96,25 @@ def extract_domain(value: str) -> Optional[str]:
     if _is_url(value):
         parsed = urlparse(value)
         hostname = parsed.hostname
-        return hostname.lower() if hostname else None
+        if not hostname:
+            return None
+        if _is_ip(hostname):
+            return None
+        return hostname.lower()
     if _is_domain(value):
         return value.lower()
+    return None
+
+
+def extract_ip_host(value: str) -> Optional[str]:
+    """Return the IP address behind a value, if the value or its URL host is one."""
+    value = value.strip()
+    if _is_ip(value):
+        return value
+    if _is_url(value):
+        hostname = urlparse(value).hostname
+        if hostname and _is_ip(hostname):
+            return hostname
     return None
 
 
@@ -200,20 +216,26 @@ def _whois_risk_from_record(record: Dict[str, Any]) -> tuple[str, str]:
 
 def get_whois(ioc: str, ioc_type: str) -> Dict[str, Any]:
     try:
-        if ioc_type == "ip":
+        ip_host = ioc if ioc_type == "ip" else extract_ip_host(ioc)
+        if ip_host:
             raw_data: Dict[str, Any] = {}
             try:
-                host, _, _ = socket.gethostbyaddr(ioc)
+                host, _, _ = socket.gethostbyaddr(ip_host)
                 raw_data["reverse_dns"] = host
             except (socket.herror, socket.gaierror):
                 raw_data["reverse_dns"] = None
                 raw_data["note"] = "No reverse DNS record found for this IP."
+            if ioc_type == "url":
+                raw_data["ip_host"] = ip_host
+                raw_data["note"] = raw_data.get("note", "") + (
+                    " WHOIS domain lookup skipped: the URL host is an IP address, "
+                    "not a registrable domain."
+                ).strip()
             return make_result(source_verdict="unknown", risk_source="unknown", raw_data=raw_data)
 
         domain = ioc if ioc_type == "domain" else extract_domain(ioc)
         if not domain:
             return make_result(error="Could not extract a domain for WHOIS lookup.")
-
 
         if whois_lib is None:
             return make_result(error="WHOIS lookup library is not installed on the server.")
