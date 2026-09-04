@@ -214,6 +214,7 @@ def get_whois(ioc: str, ioc_type: str) -> Dict[str, Any]:
         if not domain:
             return make_result(error="Could not extract a domain for WHOIS lookup.")
 
+
         if whois_lib is None:
             return make_result(error="WHOIS lookup library is not installed on the server.")
 
